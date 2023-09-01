@@ -15,27 +15,41 @@
 
 
 
+mod tests;
 
 use sha2::{Sha256, Digest};
 use rayon::prelude::*;
 
-use std::{env, thread};
+use std::{thread};
 use std::thread::available_parallelism;
+
 use clap::{Arg, Command, value_parser};
 
 
-
-struct HashCalculator {
+/// Структура, представляющая калькулятор хэшей.
+///
+/// Он использует SHA256 для генерации хэшей и ищет хэши,
+/// которые заканчиваются на определенное количество нулей.
+pub struct HashCalculator {
     number_of_zeros: usize,
     count_of_hashes: usize,
 }
 
 impl HashCalculator {
-    fn new(number_of_zeros: usize, count_of_hashes: usize) -> Self {
+    /// Создает новый экземпляр калькулятора хэшей.
+    ///
+    /// # Аргументы
+    ///
+    /// * `number_of_zeros` - Количество нулей, на которое должен заканчиваться хэш.
+    /// * `count_of_hashes` - Количество хешей, которые нужно найти.
+    pub fn new(number_of_zeros: usize, count_of_hashes: usize) -> Self {
         HashCalculator { number_of_zeros, count_of_hashes }
     }
 
-    fn calculate_hash(&self, num: u64) -> Option<(u64, String)> {
+    /// Рассчитывает хэш для заданного числа.
+    ///
+    /// Если хэш заканчивается на нужное количество нулей, возвращает `Some`, иначе `None`.
+    pub fn calculate_hash(&self, num: u64) -> Option<(u64, String)> {
         let mut hasher = Sha256::new();
         hasher.update(num.to_string());
         let result = hasher.finalize();
@@ -48,14 +62,17 @@ impl HashCalculator {
     }
 }
 
+/// Трейт для поиска и отображения хешей.
 trait HashFinder {
+    /// Ищет хэши, которые соответствуют условиям.
     fn find_hashes(&self) -> Vec<(u64, String)>;
+    /// Отображает найденные хэши.
     fn display_hashes(&self, hashes: &[(u64, String)]);
 }
 
 impl HashFinder for HashCalculator {
+    // ... [реализация трейта]
     fn find_hashes(&self) -> Vec<(u64, String)> {
-
         let threads = match available_parallelism() {
             Ok(cores) => cores.get(),
             Err(e) => {
@@ -98,34 +115,21 @@ impl HashFinder for HashCalculator {
     }
 }
 
-
+/// Главная точка входа в программу.
+///
+/// Эта функция считывает аргументы командной строки, чтобы определить количество нулей,
+/// на которое должен заканчиваться хэш, и количество хешей, которые нужно найти.
+/// Затем она инициализирует `HashCalculator`, находит и отображает соответствующие хэши.
 fn main() {
-    let args: Vec<String> = env::args().collect();
-/*
-    if args.len() != 5 {
-        eprintln!("Usage: ./hash_finder -N <number> -F <number>");
-        return;
-    }
-
-    let number_of_zeros: usize = args[2].parse().unwrap_or_else(|_| {
-        eprintln!("Invalid value for N");
-        std::process::exit(1);
-    });
-
-    let count_of_hashes: usize = args[4].parse().unwrap_or_else(|_| {
-        eprintln!("Invalid value for F");
-        std::process::exit(1);
-    });
- */
 
     let matches = Command::new("Hash Finder")
-        .version("0.1.0")
-        .author("niktimf@gmail.com")
+        //.author("niktimf@gmail.com")
         .about("Находит хэши, которые заканчиваются на определенное количество нулей и количество этих хешей")
         .arg(
             Arg::new("number_of_zeros")
                 .short('N')
                 .long("number-of-zeros")
+                .value_parser(value_parser!(u64).range(1..=64))
                 .value_name("NUMBER")
                 .help("Количество нулей в конце хеша")
                 .required(true),
@@ -134,33 +138,31 @@ fn main() {
             Arg::new("count_of_hashes")
                 .short('F')
                 .long("count-of-hashes")
+                .value_parser(value_parser!(u64).range(1..))
                 .value_name("NUMBER")
                 .help("Количество хешей, которые нужно найти")
                 .required(true),
         )
-        .get_matches();
-
-    let number_of_zeros = matches
-        .value_parser(clap::builder::NonEmptyStringValueParser::new())
-        //.value_of("number_of_zeros")
-        .unwrap_or_default()
-        .parse::<usize>()
-        .unwrap_or_else(|_| {
-            println!("Неккоректное значение для N");
-            std::process::exit(2);
-        });
-
-    let count_of_hashes = matches
-        .value_of("count_of_hashes")
-        .unwrap_or_default()
-        .parse::<usize>()
-        .unwrap_or_else(|_| {
-            println!("Неккоректное значение для F");
-            std::process::exit(3);
-        });
+        .try_get_matches()
+        .unwrap_or_else(|e| e.exit());
 
 
-    let calculator = HashCalculator::new(number_of_zeros, count_of_hashes);
+    let number_of_zeros = if let Some(value) = matches.get_one::<u64>("number_of_zeros") {
+        *value
+    } else {
+        println!("Неккоректное значение для N");
+        std::process::exit(2);
+    };
+
+    let count_of_hashes = if let Some(value) = matches.get_one::<u64>("count_of_hashes") {
+        *value
+    } else {
+        println!("Неккоректное значение для F");
+        std::process::exit(3);
+    };
+
+
+    let calculator = HashCalculator::new(number_of_zeros as usize, count_of_hashes as usize);
     let hashes = calculator.find_hashes();
     calculator.display_hashes(&hashes);
 }
